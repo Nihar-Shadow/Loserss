@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 25% 6%;
+    --foreground: 210 20% 95%;
+    --card: 220 20% 10%;
+    --card-foreground: 210 20% 95%;
+    --popover: 220 20% 10%;
+    --popover-foreground: 210 20% 95%;
+    --primary: 210 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 20% 15%;
+    --secondary-foreground: 210 20% 90%;
+    --muted: 220 15% 18%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 145 80% 42%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 15% 16%;
+    --input: 220 15% 16%;
+    --ring: 210 100% 55%;
+    --radius: 0.75rem;
+
+    --gain: 145 80% 42%;
+    --loss: 0 75% 55%;
+    --warning: 38 92% 50%;
+    --info: 210 100% 55%;
+
+    --sidebar-background: 220 25% 8%;
+    --sidebar-foreground: 210 20% 70%;
+    --sidebar-primary: 210 100% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 14%;
+    --sidebar-accent-foreground: 210 20% 95%;
+    --sidebar-border: 220 15% 14%;
+    --sidebar-ring: 210 100% 55%;
+
+    --glass: 220 20% 12% / 0.6;
+    --glass-border: 220 15% 20% / 0.3;
+    --glow-primary: 210 100% 55% / 0.15;
+    --glow-gain: 145 80% 42% / 0.15;
+    --glow-loss: 0 75% 55% / 0.15;
+
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-card/60 backdrop-blur-xl border border-border/30 rounded-xl;
+  }
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5;
+  }
+  .text-gain {
+    color: hsl(var(--gain));
+  }
+  .text-loss {
+    color: hsl(var(--loss));
+  }
+  .text-warning {
+    color: hsl(var(--warning));
+  }
+  .bg-gain {
+    background-color: hsl(var(--gain));
+  }
+  .bg-loss {
+    background-color: hsl(var(--loss));
+  }
+  .glow-primary {
+    box-shadow: 0 0 30px hsl(var(--glow-primary)), 0 0 60px hsl(var(--glow-primary));
+  }
+  .glow-gain {
+    box-shadow: 0 0 20px hsl(var(--glow-gain));
+  }
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
+  }
+  .gradient-border {
+    border-image: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent))) 1;
+  }
+}
+
+/* Marquee animation for ticker tape */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}

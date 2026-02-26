@@ -1,0 +1,16 @@
+project_id = "brebfhrsxxslqzkkxpvt"
+
+[functions.ai-chat]
+verify_jwt = false
+
+[functions.stock-predict]
+verify_jwt = false
+
+[functions.news-intelligence]
+verify_jwt = false
+
+[functions.wallet-auth]
+verify_jwt = false
+
+[functions.portfolio-upload]
+verify_jwt = false
