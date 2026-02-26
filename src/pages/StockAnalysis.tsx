@@ -8,7 +8,7 @@ import {
 import {
     BarChart2, Zap, Brain, TrendingUp, AlertTriangle,
     Activity, RefreshCw, ChevronDown, CheckCircle2, Info,
-    GitCompare, X, ArrowLeftRight,
+    GitCompare, ArrowLeftRight, Search, Trophy,
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────
@@ -22,23 +22,11 @@ const ALLOWED_CHARTS = [
     "Volatility (ATR or Std Dev) Chart",
 ];
 
-const STOCKS = [
-    { symbol: "RELIANCE", name: "Reliance Industries", sector: "Energy" },
-    { symbol: "TCS", name: "Tata Consultancy", sector: "Technology" },
-    { symbol: "HDFCBANK", name: "HDFC Bank", sector: "Banking" },
-    { symbol: "INFY", name: "Infosys", sector: "Technology" },
-    { symbol: "TATAMOTORS", name: "Tata Motors", sector: "Auto" },
-    { symbol: "WIPRO", name: "Wipro", sector: "Technology" },
-    { symbol: "AAPL", name: "Apple Inc.", sector: "Technology" },
-    { symbol: "TSLA", name: "Tesla Inc.", sector: "Auto" },
-    { symbol: "NVDA", name: "NVIDIA", sector: "Technology" },
-    { symbol: "MSFT", name: "Microsoft", sector: "Technology" },
-];
 const HORIZONS = ["1W", "1M", "3M", "6M", "1Y"];
 
 // ─── Price Generator ────────────────────────────────────────────────────
 function generatePriceHistory(symbol: string, days: number) {
-    const seed = symbol.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    const seed = symbol.toUpperCase().split("").reduce((a, c) => a + c.charCodeAt(0), 0);
     const base = 100 + (seed % 800);
     const data = [];
     let price = base;
@@ -53,7 +41,7 @@ function generatePriceHistory(symbol: string, days: number) {
         const volume = Math.round(100000 + Math.abs(rng(i, seed * 7)) * 900000);
         data.push({
             day: i + 1,
-            date: new Date(Date.now() - (days - i) * 86400000).toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
+            date: new Date(Date.now() - (days - i) * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
             price: Number(price.toFixed(2)),
             open: Number(open.toFixed(2)),
             close: Number(close.toFixed(2)),
@@ -116,12 +104,25 @@ function applyRuleOverrides(baseCharts: string[], assetType: string, volatility:
 function parseChartBlocks(raw: string) {
     const blocks: { chartType: string; purpose: string; keyInsight: string; beginnerInterpretation: string }[] = [];
     for (const section of raw.split(/CHART RECOMMENDATION:/gi).filter(Boolean)) {
+        // Stop parsing if we reach the VERDICT block
+        if (section.toUpperCase().includes("BUY VERDICT:")) break;
+
         const get = (key: string) => { const m = section.match(new RegExp(`-?\\s*${key}:\\s*(.+)`, "i")); return m ? m[1].trim() : ""; };
         const chartType = get("Chart Type");
         if (!chartType) continue;
         blocks.push({ chartType, purpose: get("Purpose"), keyInsight: get("Key Insight"), beginnerInterpretation: get("Beginner Interpretation") });
     }
     return blocks;
+}
+
+function parseVerdict(raw: string) {
+    const verdictSection = raw.split(/BUY VERDICT:/gi)[1];
+    if (!verdictSection) return null;
+
+    const get = (key: string) => { const m = verdictSection.match(new RegExp(`-?\\s*${key}:\\s*(.+)`, "i")); return m ? m[1].trim() : ""; };
+    const winner = get("Winner");
+    const rationale = get("Rationale");
+    return winner ? { winner, rationale } : null;
 }
 
 // ─── Chart Renderer ─────────────────────────────────────────────────────
@@ -280,22 +281,22 @@ function MetricCard({ label, value, color, isBadge, icon: Icon }: any) {
     );
 }
 
-// ─── Stock Selector ─────────────────────────────────────────────────────
-function StockSelect({ value, onChange, label, exclude }: { value: string; onChange: (s: string) => void; label: string; exclude?: string }) {
+// ─── Stock Input ────────────────────────────────────────────────────────
+function StockInput({ value, onChange, label }: { value: string; onChange: (s: string) => void; label: string }) {
     return (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 flex-1 relative">
             <label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">{label}</label>
             <div className="relative">
-                <select
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <input
+                    type="text"
                     value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    className="w-full bg-secondary border border-border rounded-lg px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none focus:ring-1 focus:ring-primary"
-                >
-                    {STOCKS.filter((s) => s.symbol !== exclude).map((s) => (
-                        <option key={s.symbol} value={s.symbol}>{s.symbol} — {s.name}</option>
-                    ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                    onChange={(e) => onChange(e.target.value.toUpperCase())}
+                    placeholder="e.g. AAPL, RELIANCE"
+                    className="w-full bg-secondary border border-border rounded-lg pl-10 pr-3 py-2.5 text-sm uppercase focus:outline-none focus:ring-1 focus:ring-primary"
+                />
             </div>
         </div>
     );
@@ -324,11 +325,11 @@ function CompareTable({ sym1, sym2, m1, m2 }: { sym1: string; sym2: string; m1: 
                     <div className="bg-primary/10 p-2.5 font-bold text-primary text-center border-r border-b border-border/50">{sym1}</div>
                     <div className="bg-amber-500/10 p-2.5 font-bold text-amber-400 text-center border-b border-border/50">{sym2}</div>
                     {rows.map((row, i) => (
-                        <>
-                            <div key={row.label + "l"} className={`p-2.5 text-muted-foreground border-r border-border/50 ${i < rows.length - 1 ? "border-b" : ""}`}>{row.label}</div>
-                            <div key={row.label + "v1"} className={`p-2.5 font-medium text-center border-r border-border/50 ${i < rows.length - 1 ? "border-b" : ""} ${row.label === "Total Return" ? retColor(row.v1) : ""}`}>{row.v1}</div>
-                            <div key={row.label + "v2"} className={`p-2.5 font-medium text-center ${i < rows.length - 1 ? "border-b border-border/50" : ""} ${row.label === "Total Return" ? retColor(row.v2) : ""}`}>{row.v2}</div>
-                        </>
+                        <div key={row.label} className="contents">
+                            <div className={`p-2.5 text-muted-foreground border-r border-border/50 ${i < rows.length - 1 ? "border-b" : ""}`}>{row.label}</div>
+                            <div className={`p-2.5 font-medium text-center border-r border-border/50 ${i < rows.length - 1 ? "border-b" : ""} ${row.label === "Total Return" ? retColor(row.v1) : ""}`}>{row.v1}</div>
+                            <div className={`p-2.5 font-medium text-center ${i < rows.length - 1 ? "border-b border-border/50" : ""} ${row.label === "Total Return" ? retColor(row.v2) : ""}`}>{row.v2}</div>
+                        </div>
                     ))}
                 </div>
             </div>
@@ -337,18 +338,27 @@ function CompareTable({ sym1, sym2, m1, m2 }: { sym1: string; sym2: string; m1: 
 }
 
 // ─── Groq AI Call ───────────────────────────────────────────────────────
-async function fetchChartRecommendation(input: object, GROQ_API_KEY: string): Promise<{ charts: string[]; blocks: ReturnType<typeof parseChartBlocks> }> {
+async function fetchChartRecommendation(input: any, GROQ_API_KEY: string): Promise<{ charts: string[]; blocks: ReturnType<typeof parseChartBlocks>; verdict: ReturnType<typeof parseVerdict> }> {
+    const isComparing = !!input.comparison_symbol;
+
     const systemPrompt = `You are a quantitative market visualization expert and trading analyst.
-Your task is to decide the most appropriate financial chart(s) to display based on the asset type, market behavior, and analysis objective.
+Your task is to decide the most appropriate financial chart(s) to display based on the asset profile.
 Do NOT generate code. Do NOT generate trading advice.
 Only use chart types from: ${ALLOWED_CHARTS.join(", ")}.
-For each chart, use EXACTLY this format:
 
+For each chart, use EXACTLY this format:
 CHART RECOMMENDATION:
 - Chart Type: [exact chart name from allowed list]
 - Purpose: [one sentence]
 - Key Insight: [one sentence]
-- Beginner Interpretation: [one simple sentence]`;
+- Beginner Interpretation: [one simple sentence]
+
+${isComparing ? `Since the user is comparing two stocks, you MUST include a "BUY VERDICT" at the very end of your response to determine which stock is the better buy based on the provided metrics.
+Use EXACTLY this format at the end:
+
+BUY VERDICT:
+- Winner: [Symbol of the better stock]
+- Rationale: [3-4 sentences explaining why it is a better buy, referencing the trend, return, and drawdown metrics.]` : ""}`;
 
     const userPrompt = `Based on this asset profile, recommend 2-3 charts:\n${JSON.stringify(input, null, 2)}`;
 
@@ -362,14 +372,23 @@ CHART RECOMMENDATION:
         });
         if (!resp.ok) { const t = await resp.text(); throw new Error(`Groq error ${resp.status}: ${t.slice(0, 200)}`); }
         const groqData = await resp.json();
-        const blocks = parseChartBlocks(groqData.choices?.[0]?.message?.content ?? "");
+        const content = groqData.choices?.[0]?.message?.content ?? "";
+
+        const blocks = parseChartBlocks(content);
+        const verdict = isComparing ? parseVerdict(content) : null;
+
         const charts = blocks.map((b) => b.chartType);
         const allValid = charts.every((c) => ALLOWED_CHARTS.some((a) => a.toLowerCase() === c.toLowerCase()));
         if (!allValid && attempt < 2) continue;
+
         const normalized = charts.map((c) => ALLOWED_CHARTS.find((a) => a.toLowerCase() === c.toLowerCase()) ?? c);
-        return { charts: normalized, blocks: normalized.map((c) => blocks.find((b) => ALLOWED_CHARTS.find((a) => a.toLowerCase() === b.chartType.toLowerCase()) === c) ?? { chartType: c, purpose: "", keyInsight: "", beginnerInterpretation: "" }) };
+        return {
+            charts: normalized,
+            blocks: normalized.map((c) => blocks.find((b) => ALLOWED_CHARTS.find((a) => a.toLowerCase() === b.chartType.toLowerCase()) === c) ?? { chartType: c, purpose: "", keyInsight: "", beginnerInterpretation: "" }),
+            verdict
+        };
     }
-    return { charts: [], blocks: [] };
+    return { charts: [], blocks: [], verdict: null };
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────
@@ -377,40 +396,57 @@ const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { st
 const itemAnim = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
 export default function StockAnalysis() {
-    const [sym1, setSym1] = useState("RELIANCE");
-    const [sym2, setSym2] = useState("TCS");
+    const [sym1, setSym1] = useState("AAPL");
+    const [sym2, setSym2] = useState("MSFT");
     const [compareMode, setCompareMode] = useState(false);
     const [timeHorizon, setTimeHorizon] = useState("1M");
     const [userIntent, setUserIntent] = useState<"Overview" | "Prediction" | "Risk">("Overview");
     const [assetType, setAssetType] = useState<"Stock" | "Index" | "ETF">("Stock");
     const [loading, setLoading] = useState(false);
-    const [result, setResult] = useState<{ charts: string[]; blocks: ReturnType<typeof parseChartBlocks> } | null>(null);
+    const [result, setResult] = useState<{ charts: string[]; blocks: ReturnType<typeof parseChartBlocks>; verdict: ReturnType<typeof parseVerdict> } | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     const days = { "1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 252 }[timeHorizon] ?? 30;
-    const stock1 = STOCKS.find((s) => s.symbol === sym1) ?? STOCKS[0];
-    const stock2 = STOCKS.find((s) => s.symbol === sym2) ?? STOCKS[1];
 
-    const history1 = useMemo(() => generatePriceHistory(sym1, days), [sym1, days]);
-    const history2 = useMemo(() => generatePriceHistory(sym2, days), [sym2, days]);
+    const validSym1 = sym1.trim() || "AAPL";
+    const validSym2 = sym2.trim() || "MSFT";
+
+    const history1 = useMemo(() => generatePriceHistory(validSym1, days), [validSym1, days]);
+    const history2 = useMemo(() => generatePriceHistory(validSym2, days), [validSym2, days]);
     const metrics1 = useMemo(() => computeMetrics(history1), [history1]);
     const metrics2 = useMemo(() => computeMetrics(history2), [history2]);
 
     const analyze = async () => {
         const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
         if (!GROQ_API_KEY) { setError("VITE_GROQ_API_KEY not set in .env"); return; }
+        if (!sym1.trim() || (compareMode && !sym2.trim())) { setError("Please enter valid stock symbols."); return; }
+
         setLoading(true); setResult(null); setError(null);
         try {
-            const input: any = { asset_type: assetType, asset_symbol: sym1, time_horizon: timeHorizon, volatility_level: metrics1.volatility, trend_strength: metrics1.trend, liquidity: metrics1.liquidity, user_intent: userIntent };
+            const input: any = {
+                asset_type: assetType,
+                asset_symbol: validSym1,
+                time_horizon: timeHorizon,
+                volatility_level: metrics1.volatility,
+                trend_strength: metrics1.trend,
+                liquidity: metrics1.liquidity,
+                user_intent: userIntent,
+                total_return: metrics1.totalReturn + "%",
+                max_drawdown: metrics1.maxDrawdown + "%"
+            };
             if (compareMode) {
-                input.comparison_symbol = sym2;
+                input.comparison_symbol = validSym2;
                 input.comparison_volatility = metrics2.volatility;
                 input.comparison_trend = metrics2.trend;
+                input.comparison_total_return = metrics2.totalReturn + "%";
+                input.comparison_max_drawdown = metrics2.maxDrawdown + "%";
             }
+
             const raw = await fetchChartRecommendation(input, GROQ_API_KEY);
             const finalCharts = applyRuleOverrides(raw.charts, assetType, metrics1.volatility, userIntent);
             const finalBlocks = finalCharts.map((c) => raw.blocks.find((b) => b.chartType === c) ?? { chartType: c, purpose: "", keyInsight: "", beginnerInterpretation: "" });
-            setResult({ charts: finalCharts, blocks: finalBlocks });
+
+            setResult({ charts: finalCharts, blocks: finalBlocks, verdict: raw.verdict });
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -437,50 +473,34 @@ export default function StockAnalysis() {
                 <h1 className="text-3xl font-bold flex items-center gap-3">
                     <BarChart2 className="w-8 h-8 text-primary" /> Smart Stock Analysis
                 </h1>
-                <p className="text-muted-foreground mt-1 text-sm">Groq-powered chart recommendation engine · Compare two stocks side-by-side</p>
+                <p className="text-muted-foreground mt-1 text-sm">Groq-powered chart recommendation engine · Search any stock & get an AI verdict</p>
             </motion.div>
 
             {/* Controls Panel */}
             <motion.div variants={itemAnim} className="glass-card p-5 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col md:flex-row gap-4 items-end">
                     {/* Stock 1 */}
-                    <StockSelect value={sym1} onChange={(v) => { setSym1(v); setResult(null); }} label={compareMode ? "Stock A" : "Stock"} exclude={compareMode ? sym2 : undefined} />
+                    <StockInput value={sym1} onChange={(v) => { setSym1(v); setResult(null); }} label={compareMode ? "Stock A" : "Search Symbol"} />
 
-                    {/* Stock 2 or Compare Toggle */}
-                    <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                            <label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Compare With</label>
-                            <button
-                                onClick={() => { setCompareMode(!compareMode); setResult(null); }}
-                                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border font-semibold transition-all ${compareMode ? "bg-amber-500/10 border-amber-500/40 text-amber-400" : "border-border text-muted-foreground hover:border-primary/40"}`}
-                            >
-                                <GitCompare className="w-3.5 h-3.5" />
-                                {compareMode ? "Compare ON" : "Enable Compare"}
-                            </button>
-                        </div>
-                        {compareMode ? (
-                            <div className="relative">
-                                <select
-                                    value={sym2}
-                                    onChange={(e) => { setSym2(e.target.value); setResult(null); }}
-                                    className="w-full bg-secondary border border-amber-500/40 rounded-lg px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                                >
-                                    {STOCKS.filter((s) => s.symbol !== sym1).map((s) => (
-                                        <option key={s.symbol} value={s.symbol}>{s.symbol} — {s.name}</option>
-                                    ))}
-                                </select>
-                                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                            </div>
-                        ) : (
-                            <div className="h-10 flex items-center text-xs text-muted-foreground bg-secondary/40 rounded-lg px-3 border border-dashed border-border/50">
-                                Click "Enable Compare" to add a second stock
-                            </div>
-                        )}
+                    {/* Toggle Compare */}
+                    <div className="flex flex-col gap-1.5 shrink-0 self-center md:self-end pb-1.5 md:pb-0">
+                        <button
+                            onClick={() => { setCompareMode(!compareMode); setResult(null); }}
+                            className={`flex items-center justify-center gap-2 h-[42px] px-4 rounded-lg border font-semibold transition-all ${compareMode ? "bg-amber-500/10 border-amber-500/40 text-amber-400" : "bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary"}`}
+                        >
+                            <GitCompare className="w-4 h-4" />
+                            {compareMode ? "Compare ON" : "Enable Compare"}
+                        </button>
                     </div>
+
+                    {/* Stock 2 */}
+                    {compareMode && (
+                        <StockInput value={sym2} onChange={(v) => { setSym2(v); setResult(null); }} label="Stock B" />
+                    )}
                 </div>
 
                 {/* Horizon + Intent + Type + Analyze */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="space-y-1.5">
                         <label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Horizon</label>
                         <div className="flex gap-1">
@@ -498,7 +518,7 @@ export default function StockAnalysis() {
                         <div className="flex gap-1">
                             {(["Overview", "Prediction", "Risk"] as const).map((i) => (
                                 <button key={i} onClick={() => { setUserIntent(i); setResult(null); }}
-                                    className={`flex-1 text-xs py-2 rounded-md border transition-colors ${userIntent === i ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/40 text-muted-foreground"}`}>
+                                    className={`flex-1 text-xs px-1 py-2 rounded-md border transition-colors ${userIntent === i ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/40 text-muted-foreground"}`}>
                                     {i}
                                 </button>
                             ))}
@@ -518,22 +538,22 @@ export default function StockAnalysis() {
                     </div>
 
                     <div className="flex flex-col justify-end">
-                        <button onClick={analyze} disabled={loading}
+                        <button onClick={analyze} disabled={loading || !sym1.trim() || (compareMode && !sym2.trim())}
                             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50">
                             {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Brain className="w-4 h-4" />}
-                            {loading ? "Analyzing…" : compareMode ? `Compare ${sym1} vs ${sym2}` : "Analyze"}
+                            {loading ? "Analyzing…" : compareMode ? `Compare ${validSym1} vs ${validSym2}` : `Analyze ${validSym1}`}
                         </button>
                     </div>
                 </div>
             </motion.div>
 
             {/* Metrics Panels */}
-            <motion.div variants={itemAnim} className={`grid gap-4 ${compareMode ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"}`}>
+            <motion.div variants={itemAnim} className={`grid gap-4 ${compareMode ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"}`}>
                 {/* Stock 1 Metrics */}
                 <div className="space-y-2">
                     {compareMode && (
-                        <div className="flex items-center gap-2 text-xs font-semibold text-primary px-1">
-                            <div className="w-3 h-3 rounded-full bg-primary" /> {sym1} — {stock1.name}
+                        <div className="flex items-center gap-2 text-sm font-semibold text-primary px-1">
+                            <div className="w-3 h-3 rounded-full bg-primary" /> {validSym1}
                         </div>
                     )}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -548,8 +568,8 @@ export default function StockAnalysis() {
                 <AnimatePresence>
                     {compareMode && (
                         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-2">
-                            <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 px-1">
-                                <div className="w-3 h-3 rounded-full bg-amber-400" /> {sym2} — {stock2.name}
+                            <div className="flex items-center gap-2 text-sm font-semibold text-amber-400 px-1">
+                                <div className="w-3 h-3 rounded-full bg-amber-400" /> {validSym2}
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                                 <MetricCard label="Volatility" value={metrics2.volatility} color={volColor(metrics2.volatility)} icon={Activity} />
@@ -562,11 +582,40 @@ export default function StockAnalysis() {
                 </AnimatePresence>
             </motion.div>
 
-            {/* Head-to-Head Table */}
+            {/* Head-to-Head Table & AI Verdict */}
             <AnimatePresence>
-                {compareMode && (
-                    <motion.div variants={itemAnim} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                        <CompareTable sym1={sym1} sym2={sym2} m1={metrics1} m2={metrics2} />
+                {compareMode && result && (
+                    <motion.div variants={itemAnim} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-border/50 pt-6">
+                        <CompareTable sym1={validSym1} sym2={validSym2} m1={metrics1} m2={metrics2} />
+
+                        {/* Verdict Box */}
+                        <div className="glass-card border-amber-500/20 bg-amber-500/5 relative overflow-hidden flex flex-col">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-bl-full blur-2xl pointer-events-none" />
+                            <div className="flex items-center gap-2 p-4 border-b border-amber-500/10">
+                                <Brain className="w-4 h-4 text-amber-400" />
+                                <h3 className="font-semibold text-sm text-amber-400">AI Buy Verdict</h3>
+                            </div>
+                            <div className="p-5 flex-1 flex flex-col justify-center">
+                                {result.verdict ? (
+                                    <div className="space-y-4">
+                                        <div className="space-y-1">
+                                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Winner</span>
+                                            <div className="flex items-center gap-2 text-2xl font-bold text-amber-500">
+                                                <Trophy className="w-6 h-6" /> {result.verdict.winner}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rationale</span>
+                                            <p className="text-sm leading-relaxed text-foreground/90">
+                                                {result.verdict.rationale}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground italic text-center">AI could not determine a clear winner or response was truncated.</p>
+                                )}
+                            </div>
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -590,7 +639,7 @@ export default function StockAnalysis() {
                                 {metrics1.volatility === "High" && " Candlestick forced (High Volatility)."}
                                 {userIntent === "Prediction" && " RSI enforced (Prediction intent)."}
                                 {assetType === "Index" && " Candlestick removed, Line Chart enforced (Index)."}
-                                {compareMode && ` Charts show indexed comparison: ${sym1} (blue) vs ${sym2} (amber) — both normalized to base 100.`}
+                                {compareMode && ` Charts show indexed comparison: ${validSym1} (blue) vs ${validSym2} (amber) — both normalized to base 100.`}
                             </span>
                         </div>
 
@@ -602,7 +651,7 @@ export default function StockAnalysis() {
                                         <div>
                                             <p className="font-semibold text-sm">{block.chartType}</p>
                                             <p className="text-xs text-muted-foreground">
-                                                {compareMode ? `${sym1} vs ${sym2}` : sym1} · {timeHorizon} · {assetType}
+                                                {compareMode ? `${validSym1} vs ${validSym2}` : validSym1} · {timeHorizon} · {assetType}
                                             </p>
                                         </div>
                                     </div>
@@ -627,8 +676,8 @@ export default function StockAnalysis() {
                                         rsiSeries={metrics1.rsiSeries}
                                         volSeries={metrics1.volSeries}
                                         compareHistory={compareMode ? history2 : null}
-                                        compareSymbol={sym2}
-                                        symbol={sym1}
+                                        compareSymbol={validSym2}
+                                        symbol={validSym1}
                                     />
                                 </div>
 
@@ -652,9 +701,9 @@ export default function StockAnalysis() {
             {/* Empty State */}
             {!result && !loading && !error && (
                 <motion.div variants={itemAnim} className="glass-card p-12 flex flex-col items-center justify-center text-center text-muted-foreground gap-3">
-                    <BarChart2 className="w-12 h-12 opacity-20" />
-                    <p className="font-medium">Select a stock and click <span className="text-primary font-bold">Analyze</span></p>
-                    <p className="text-sm">Enable <span className="text-amber-400 font-medium">Compare</span> to overlay two stocks on the same chart</p>
+                    <Search className="w-12 h-12 opacity-20" />
+                    <p className="font-medium">Search any stock and click <span className="text-primary font-bold">Analyze</span></p>
+                    <p className="text-sm">Enable <span className="text-amber-400 font-medium">Compare</span> to overlay two assets and get an AI Buy Verdict</p>
                 </motion.div>
             )}
         </motion.div>
