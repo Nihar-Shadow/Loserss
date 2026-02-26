@@ -8,7 +8,7 @@ import {
 import {
     BarChart2, Zap, Brain, TrendingUp, AlertTriangle,
     Activity, RefreshCw, ChevronDown, CheckCircle2, Info,
-    GitCompare, ArrowLeftRight, Search, Trophy,
+    GitCompare, ArrowLeftRight, Search, Trophy, Layers, Target, Coins
 } from "lucide-react";
 
 // ─── Constants ─────────────────────────────────────────────────────────
@@ -54,7 +54,7 @@ function generatePriceHistory(symbol: string, days: number) {
 }
 
 // ─── Metrics ────────────────────────────────────────────────────────────
-function computeMetrics(history: ReturnType<typeof generatePriceHistory>) {
+function computeMetrics(history: ReturnType<typeof generatePriceHistory>, symbol: string) {
     const prices = history.map((d) => d.price);
     const returns = prices.slice(1).map((p, i) => (p - prices[i]) / prices[i]);
     const stdDev = Math.sqrt(returns.reduce((a, r) => a + r * r, 0) / returns.length) * Math.sqrt(252);
@@ -75,6 +75,18 @@ function computeMetrics(history: ReturnType<typeof generatePriceHistory>) {
     const maxPrice = Math.max(...prices), minPrice = Math.min(...prices);
     const maxDrawdown = Number((((maxPrice - minPrice) / maxPrice) * 100).toFixed(2));
 
+    // Determine fundamentals deterministically via seed
+    const currentPriceStr = `$${prices[prices.length - 1].toFixed(2)}`;
+    const allHighs = history.map((d) => d.high);
+    const allLows = history.map((d) => d.low);
+    const highLow = `$${Math.max(...allHighs).toFixed(2)} / $${Math.min(...allLows).toFixed(2)}`;
+
+    const seed = symbol.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    const mktCapValues = [1.2, 45.5, 200, 850, 1500, 2800, 3100, 15.4, 8.2, 120.5];
+    const mcVal = mktCapValues[seed % mktCapValues.length];
+    const marketCap = mcVal >= 1000 ? `$${(mcVal / 1000).toFixed(2)}T` : `$${mcVal}B`;
+    const peRatio = (8 + (seed % 142) + (seed % 10) * 0.1).toFixed(2);
+
     const withMA = history.map((d, i) => ({
         ...d,
         ma20: i >= 19 ? Number((prices.slice(i - 19, i + 1).reduce((a, b) => a + b, 0) / 20).toFixed(2)) : null,
@@ -88,7 +100,7 @@ function computeMetrics(history: ReturnType<typeof generatePriceHistory>) {
     });
     const volSeries = history.map((d) => ({ ...d, atr: Number((((d.high - d.low) / d.price) * 100).toFixed(2)) }));
 
-    return { volatility, trend, liquidity, stdDev, rsi, totalReturn, maxDrawdown, withMA, rsiSeries, volSeries };
+    return { volatility, trend, liquidity, stdDev, rsi, totalReturn, maxDrawdown, currentPriceStr, marketCap, peRatio, highLow, withMA, rsiSeries, volSeries };
 }
 
 // ─── Rule Override ──────────────────────────────────────────────────────
@@ -305,6 +317,10 @@ function StockInput({ value, onChange, label }: { value: string; onChange: (s: s
 // ─── Comparison Metrics Table ───────────────────────────────────────────
 function CompareTable({ sym1, sym2, m1, m2 }: { sym1: string; sym2: string; m1: ReturnType<typeof computeMetrics>; m2: ReturnType<typeof computeMetrics> }) {
     const rows = [
+        { label: "Current Price", v1: m1.currentPriceStr, v2: m2.currentPriceStr },
+        { label: "Market Cap", v1: m1.marketCap, v2: m2.marketCap },
+        { label: "P/E Ratio", v1: m1.peRatio, v2: m2.peRatio },
+        { label: "High / Low", v1: m1.highLow, v2: m2.highLow },
         { label: "Trend", v1: m1.trend, v2: m2.trend },
         { label: "Volatility", v1: m1.volatility, v2: m2.volatility },
         { label: "Liquidity", v1: m1.liquidity, v2: m2.liquidity },
@@ -312,7 +328,7 @@ function CompareTable({ sym1, sym2, m1, m2 }: { sym1: string; sym2: string; m1: 
         { label: "Total Return", v1: (m1.totalReturn > 0 ? "+" : "") + m1.totalReturn + "%", v2: (m2.totalReturn > 0 ? "+" : "") + m2.totalReturn + "%" },
         { label: "Max Drawdown", v1: m1.maxDrawdown + "%", v2: m2.maxDrawdown + "%" },
     ];
-    const retColor = (v: string) => v.startsWith("+") ? "text-emerald-400" : "text-red-400";
+    const retColor = (v: string) => v.startsWith("+") ? "text-emerald-400" : v.startsWith("-") ? "text-red-400" : "text-foreground";
     return (
         <div className="glass-card overflow-hidden">
             <div className="flex items-center gap-2 p-4 border-b border-border/50 bg-primary/5">
@@ -327,8 +343,8 @@ function CompareTable({ sym1, sym2, m1, m2 }: { sym1: string; sym2: string; m1: 
                     {rows.map((row, i) => (
                         <div key={row.label} className="contents">
                             <div className={`p-2.5 text-muted-foreground border-r border-border/50 ${i < rows.length - 1 ? "border-b" : ""}`}>{row.label}</div>
-                            <div className={`p-2.5 font-medium text-center border-r border-border/50 ${i < rows.length - 1 ? "border-b" : ""} ${row.label === "Total Return" ? retColor(row.v1) : ""}`}>{row.v1}</div>
-                            <div className={`p-2.5 font-medium text-center ${i < rows.length - 1 ? "border-b border-border/50" : ""} ${row.label === "Total Return" ? retColor(row.v2) : ""}`}>{row.v2}</div>
+                            <div className={`p-2.5 font-medium text-center border-r border-border/50 ${i < rows.length - 1 ? "border-b" : ""} ${row.label === "Total Return" ? retColor(row.v1) : "text-foreground"}`}>{row.v1}</div>
+                            <div className={`p-2.5 font-medium text-center ${i < rows.length - 1 ? "border-b border-border/50" : ""} ${row.label === "Total Return" ? retColor(row.v2) : "text-foreground"}`}>{row.v2}</div>
                         </div>
                     ))}
                 </div>
@@ -413,8 +429,8 @@ export default function StockAnalysis() {
 
     const history1 = useMemo(() => generatePriceHistory(validSym1, days), [validSym1, days]);
     const history2 = useMemo(() => generatePriceHistory(validSym2, days), [validSym2, days]);
-    const metrics1 = useMemo(() => computeMetrics(history1), [history1]);
-    const metrics2 = useMemo(() => computeMetrics(history2), [history2]);
+    const metrics1 = useMemo(() => computeMetrics(history1, validSym1), [history1, validSym1]);
+    const metrics2 = useMemo(() => computeMetrics(history2, validSym2), [history2, validSym2]);
 
     const analyze = async () => {
         const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
@@ -427,6 +443,9 @@ export default function StockAnalysis() {
                 asset_type: assetType,
                 asset_symbol: validSym1,
                 time_horizon: timeHorizon,
+                current_price: metrics1.currentPriceStr,
+                market_cap: metrics1.marketCap,
+                pe_ratio: metrics1.peRatio,
                 volatility_level: metrics1.volatility,
                 trend_strength: metrics1.trend,
                 liquidity: metrics1.liquidity,
@@ -436,6 +455,9 @@ export default function StockAnalysis() {
             };
             if (compareMode) {
                 input.comparison_symbol = validSym2;
+                input.comparison_price = metrics2.currentPriceStr;
+                input.comparison_market_cap = metrics2.marketCap;
+                input.comparison_pe_ratio = metrics2.peRatio;
                 input.comparison_volatility = metrics2.volatility;
                 input.comparison_trend = metrics2.trend;
                 input.comparison_total_return = metrics2.totalReturn + "%";
@@ -557,6 +579,10 @@ export default function StockAnalysis() {
                         </div>
                     )}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <MetricCard label="Current Price" value={metrics1.currentPriceStr} color="text-foreground" icon={Coins} />
+                        <MetricCard label="Market Cap" value={metrics1.marketCap} color="text-foreground" icon={Layers} />
+                        <MetricCard label="P/E Ratio" value={metrics1.peRatio} color="text-foreground" icon={Target} />
+                        <MetricCard label="High / Low" value={metrics1.highLow} color="text-muted-foreground" icon={ArrowLeftRight} />
                         <MetricCard label="Volatility" value={metrics1.volatility} color={volColor(metrics1.volatility)} icon={Activity} />
                         <MetricCard label="Trend" value={metrics1.trend} color={trendBadge(metrics1.trend)} isBadge icon={TrendingUp} />
                         <MetricCard label="RSI (14)" value={metrics1.rsi.toFixed(1)} color={rsiColor(metrics1.rsi)} icon={BarChart2} />
@@ -572,6 +598,10 @@ export default function StockAnalysis() {
                                 <div className="w-3 h-3 rounded-full bg-amber-400" /> {validSym2}
                             </div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <MetricCard label="Current Price" value={metrics2.currentPriceStr} color="text-foreground" icon={Coins} />
+                                <MetricCard label="Market Cap" value={metrics2.marketCap} color="text-foreground" icon={Layers} />
+                                <MetricCard label="P/E Ratio" value={metrics2.peRatio} color="text-foreground" icon={Target} />
+                                <MetricCard label="High / Low" value={metrics2.highLow} color="text-muted-foreground" icon={ArrowLeftRight} />
                                 <MetricCard label="Volatility" value={metrics2.volatility} color={volColor(metrics2.volatility)} icon={Activity} />
                                 <MetricCard label="Trend" value={metrics2.trend} color={trendBadge(metrics2.trend)} isBadge icon={TrendingUp} />
                                 <MetricCard label="RSI (14)" value={metrics2.rsi.toFixed(1)} color={rsiColor(metrics2.rsi)} icon={BarChart2} />
