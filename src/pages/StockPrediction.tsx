@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp, TrendingDown, Brain, Zap, ChevronDown, Target,
@@ -57,8 +57,8 @@ const SignalBadge = ({ signal }: { signal: string }) => {
   const cls = signal === "bullish"
     ? "bg-gain/15 text-gain border-gain/30"
     : signal === "bearish"
-    ? "bg-loss/15 text-loss border-loss/30"
-    : "bg-warning/15 text-warning border-warning/30";
+      ? "bg-loss/15 text-loss border-loss/30"
+      : "bg-warning/15 text-warning border-warning/30";
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${cls} uppercase tracking-wider`}>
       {signal}
@@ -81,6 +81,50 @@ export default function StockPrediction() {
   const minPrice = Math.min(...priceData.map(d => d.price));
   const maxPrice = Math.max(...priceData.map(d => d.price));
 
+  const [userAccuracy, setUserAccuracy] = useState<number | null>(null);
+  const [aiAccuracy, setAiAccuracy] = useState<number | null>(null);
+
+  const fetchAccuracies = useCallback(async () => {
+    if (!user) return;
+    try {
+      // Last 30 predictions for user
+      const { data: userPreds, error: uErr } = await supabase
+        .from("predictions")
+        .select("user_correct")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(30);
+
+      // Last 100 for AI across everyone to get a broader AI accuracy stat
+      const { data: aiPreds, error: aErr } = await supabase
+        .from("predictions")
+        .select("ai_correct")
+        .order("created_at", { ascending: false })
+        .limit(100);
+
+      if (!uErr && userPreds && userPreds.length > 0) {
+        const correct = userPreds.filter(p => p.user_correct === true).length;
+        setUserAccuracy(Math.round((correct / userPreds.length) * 100));
+      } else {
+        setUserAccuracy(null);
+      }
+
+      if (!aErr && aiPreds && aiPreds.length > 0) {
+        const correct = aiPreds.filter(p => p.ai_correct === true).length;
+        setAiAccuracy(Math.round((correct / aiPreds.length) * 100));
+      } else {
+        setAiAccuracy(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [user]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchAccuracies();
+  }, [fetchAccuracies]);
+
   const handlePredict = useCallback(async (dir: "up" | "down") => {
     setPrediction(dir);
     setPhase("analyzing");
@@ -95,7 +139,7 @@ export default function StockPrediction() {
           sector: selectedStock.sector,
           price: selectedStock.price,
           userPrediction: dir,
-          priceHistory: priceData.slice(-10),
+          priceHistory: priceData.slice(-50), // Send 50 days so the API can compute MA20/MA50!
         },
       });
 
@@ -105,7 +149,6 @@ export default function StockPrediction() {
       const result = data as AIAnalysis;
       setAnalysis(result);
 
-      // Small delay for dramatic reveal
       await new Promise(r => setTimeout(r, 800));
       setPhase("reveal");
 
@@ -133,6 +176,7 @@ export default function StockPrediction() {
           confidence: result.confidence,
           ai_explanation: result.outcome_explanation,
         });
+        fetchAccuracies();
       }
     } catch (e: any) {
       console.error("Prediction error:", e);
@@ -142,7 +186,7 @@ export default function StockPrediction() {
     } finally {
       setLoading(false);
     }
-  }, [selectedStock, priceData, user]);
+  }, [selectedStock, priceData, user, fetchAccuracies]);
 
   const handleReset = () => {
     setPrediction(null);
@@ -365,8 +409,14 @@ export default function StockPrediction() {
           {phase === "reveal" && analysis && prediction && (
             <motion.div variants={resultReveal} initial="hidden" animate="show" className="glass-card p-5 space-y-4">
               <h3 className="font-semibold flex items-center gap-2"><Trophy className="w-4 h-4 text-warning" /> Scoreboard</h3>
+
+              <div className="flex justify-between items-center text-xs font-medium text-muted-foreground pb-2 border-b border-border/50">
+                <p>AI Accuracy <span className="text-foreground ml-1">{aiAccuracy !== null ? aiAccuracy + "%" : "--"}</span></p>
+                <p>Your Accuracy <span className="text-foreground ml-1">{userAccuracy !== null ? userAccuracy + "%" : "--"}</span></p>
+              </div>
+
               <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                <div className="rounded-lg bg-secondary/50 p-3">
+                <div className="rounded-lg bg-secondary/50 p-3 flex flex-col items-center justify-center">
                   <p className="text-muted-foreground text-xs mb-1">You</p>
                   <p className={`font-bold ${prediction === "up" ? "text-gain" : "text-loss"}`}>
                     {prediction === "up" ? "↑ UP" : "↓ DOWN"}
@@ -375,7 +425,7 @@ export default function StockPrediction() {
                     {userCorrect ? "✓ Correct" : "✗ Wrong"}
                   </p>
                 </div>
-                <div className="rounded-lg bg-secondary/50 p-3">
+                <div className="rounded-lg bg-secondary/50 p-3 flex flex-col items-center justify-center">
                   <p className="text-muted-foreground text-xs mb-1">AI</p>
                   <p className={`font-bold ${analysis.ai_direction === "up" ? "text-gain" : "text-loss"}`}>
                     {analysis.ai_direction === "up" ? "↑ UP" : "↓ DOWN"}
@@ -384,7 +434,7 @@ export default function StockPrediction() {
                     {aiCorrect ? "✓ Correct" : "✗ Wrong"}
                   </p>
                 </div>
-                <div className="rounded-lg bg-primary/10 border border-primary/20 p-3">
+                <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 flex flex-col items-center justify-center">
                   <p className="text-muted-foreground text-xs mb-1">Actual</p>
                   <p className={`font-bold ${analysis.actual_result === "up" ? "text-gain" : "text-loss"}`}>
                     {analysis.actual_result === "up" ? "↑ UP" : "↓ DOWN"}
@@ -394,6 +444,19 @@ export default function StockPrediction() {
               </div>
             </motion.div>
           )}
+
+          {/* Model Transparency */}
+          <div className="glass-card p-5">
+            <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm">
+              <Shield className="w-4 h-4 text-primary" /> Model Transparency
+            </h3>
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p><strong className="text-foreground">Features Used:</strong> RSI, 20-Day MA, 50-Day MA, Volume Spikes, Sector Sentiment Map</p>
+              <p><strong className="text-foreground">Data Window:</strong> Last 50 Days closing, HLC averages</p>
+              <p><strong className="text-foreground">Prediction Logic:</strong> Deterministic signal scoring system</p>
+              <p><strong className="text-foreground">Confidence Derived:</strong> Formulaic mapping of point differential</p>
+            </div>
+          </div>
 
           {/* AI Analysis Card */}
           <div className="glass-card p-5">

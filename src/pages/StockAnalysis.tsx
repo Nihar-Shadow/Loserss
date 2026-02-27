@@ -24,50 +24,42 @@ const ALLOWED_CHARTS = [
 
 const HORIZONS = ["1W", "1M", "3M", "6M", "1Y"];
 
-// ─── Price Generator ────────────────────────────────────────────────────
-function generatePriceHistory(symbol: string, days: number) {
-    const seed = symbol.toUpperCase().split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-    const base = 100 + (seed % 800);
-    const data = [];
-    let price = base;
-    const rng = (i: number, s: number) => Math.sin(i * 0.3 + s) * 0.5 + Math.cos(i * 0.11 + s * 0.5) * 0.5;
-    for (let i = 0; i < days; i++) {
-        const noise = rng(i, seed) * 4;
-        price = Math.max(10, price + noise + (rng(i + 100, seed * 3) - 0.5) * base * 0.012);
-        const open = price;
-        const close = price + rng(i + 50, seed * 2) * base * 0.008;
-        const high = Math.max(open, close) + Math.abs(rng(i + 200, seed)) * base * 0.006;
-        const low = Math.min(open, close) - Math.abs(rng(i + 300, seed)) * base * 0.006;
-        const volume = Math.round(100000 + Math.abs(rng(i, seed * 7)) * 900000);
-        data.push({
-            day: i + 1,
-            date: new Date(Date.now() - (days - i) * 86400000).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-            price: Number(price.toFixed(2)),
-            open: Number(open.toFixed(2)),
-            close: Number(close.toFixed(2)),
-            high: Number(high.toFixed(2)),
-            low: Number(low.toFixed(2)),
-            volume,
-        });
-    }
-    return data;
+// ─── Data Processor ─────────────────────────────────────────────────────
+function processHistory(rawArray: any[], daysLimit: number) {
+    if (!rawArray || !rawArray.length) return [];
+    const valid = rawArray.filter((d: any) => d.close != null).slice(-daysLimit);
+    return valid.map((d: any, i: number) => ({
+        day: i + 1,
+        date: new Date(d.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        price: Number(d.close?.toFixed(2)) || 0,
+        open: Number(d.open?.toFixed(2)) || 0,
+        close: Number(d.close?.toFixed(2)) || 0,
+        high: Number(d.high?.toFixed(2)) || 0,
+        low: Number(d.low?.toFixed(2)) || 0,
+        volume: d.volume || 0,
+    }));
 }
 
 // ─── Metrics ────────────────────────────────────────────────────────────
-function computeMetrics(history: ReturnType<typeof generatePriceHistory>, symbol: string) {
+function computeMetrics(history: any[], quote: any) {
+    if (!history || !history.length) return null;
     const prices = history.map((d) => d.price);
     const returns = prices.slice(1).map((p, i) => (p - prices[i]) / prices[i]);
-    const stdDev = Math.sqrt(returns.reduce((a, r) => a + r * r, 0) / returns.length) * Math.sqrt(252);
+    const stdDev = returns.length ? Math.sqrt(returns.reduce((a, r) => a + r * r, 0) / returns.length) * Math.sqrt(252) : 0;
     const volatility: "Low" | "Medium" | "High" = stdDev > 0.4 ? "High" : stdDev > 0.2 ? "Medium" : "Low";
-    const ma20 = prices.slice(-20).reduce((a, b) => a + b, 0) / 20;
-    const ma50 = prices.slice(-Math.min(50, prices.length)).reduce((a, b) => a + b, 0) / Math.min(50, prices.length);
+
+    const ma20 = prices.slice(-20).reduce((a, b) => a + b, 0) / Math.min(20, prices.length) || prices[prices.length - 1];
+    const ma50 = prices.slice(-50).reduce((a, b) => a + b, 0) / Math.min(50, prices.length) || prices[prices.length - 1];
+
     const trend: "Strong Uptrend" | "Uptrend" | "Sideways" | "Downtrend" | "Strong Downtrend" =
         prices[prices.length - 1] > ma20 * 1.03 && ma20 > ma50 * 1.01 ? "Strong Uptrend" :
             prices[prices.length - 1] > ma20 ? "Uptrend" :
                 prices[prices.length - 1] < ma20 * 0.97 && ma20 < ma50 * 0.99 ? "Strong Downtrend" :
                     prices[prices.length - 1] < ma20 ? "Downtrend" : "Sideways";
+
     const avgVolume = history.reduce((a, d) => a + d.volume, 0) / history.length;
-    const liquidity: "High" | "Medium" | "Low" = avgVolume > 500000 ? "High" : avgVolume > 200000 ? "Medium" : "Low";
+    const liquidity: "High" | "Medium" | "Low" = avgVolume > 5000000 ? "High" : avgVolume > 1000000 ? "Medium" : "Low";
+
     let gains = 0, losses = 0;
     returns.slice(-14).forEach((r) => { if (r > 0) gains += r; else losses += Math.abs(r); });
     const rsi = Number((100 - 100 / (1 + gains / (losses || 0.001))).toFixed(1));
@@ -75,30 +67,39 @@ function computeMetrics(history: ReturnType<typeof generatePriceHistory>, symbol
     const maxPrice = Math.max(...prices), minPrice = Math.min(...prices);
     const maxDrawdown = Number((((maxPrice - minPrice) / maxPrice) * 100).toFixed(2));
 
-    // Determine fundamentals deterministically via seed
-    const currentPriceStr = `$${prices[prices.length - 1].toFixed(2)}`;
-    const allHighs = history.map((d) => d.high);
-    const allLows = history.map((d) => d.low);
-    const highLow = `$${Math.max(...allHighs).toFixed(2)} / $${Math.min(...allLows).toFixed(2)}`;
+    let currencySym = "$";
+    if (quote?.currency === "INR") currencySym = "₹";
+    else if (quote?.currency === "EUR") currencySym = "€";
+    else if (quote?.currency === "GBP") currencySym = "£";
 
-    const seed = symbol.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-    const mktCapValues = [1.2, 45.5, 200, 850, 1500, 2800, 3100, 15.4, 8.2, 120.5];
-    const mcVal = mktCapValues[seed % mktCapValues.length];
-    const marketCap = mcVal >= 1000 ? `$${(mcVal / 1000).toFixed(2)}T` : `$${mcVal}B`;
-    const peRatio = (8 + (seed % 142) + (seed % 10) * 0.1).toFixed(2);
+    const currentPriceStr = `${currencySym}${(quote?.regularMarketPrice || prices[prices.length - 1] || 0).toFixed(2)}`;
+
+    const formatValue = (num: number) => {
+        if (!num) return "N/A";
+        if (num >= 1e12) return `${currencySym}${(num / 1e12).toFixed(2)}T`;
+        if (num >= 1e9) return `${currencySym}${(num / 1e9).toFixed(2)}B`;
+        if (num >= 1e6) return `${currencySym}${(num / 1e6).toFixed(2)}M`;
+        return `${currencySym}${num.toLocaleString()}`;
+    };
+
+    const marketCap = formatValue(quote?.marketCap);
+    const peRatio = quote?.trailingPE ? quote.trailingPE.toFixed(2) : quote?.forwardPE ? quote.forwardPE.toFixed(2) : "N/A";
+    const highLow = `${currencySym}${(quote?.fiftyTwoWeekHigh || maxPrice).toFixed(2)} / ${currencySym}${(quote?.fiftyTwoWeekLow || minPrice).toFixed(2)}`;
 
     const withMA = history.map((d, i) => ({
         ...d,
         ma20: i >= 19 ? Number((prices.slice(i - 19, i + 1).reduce((a, b) => a + b, 0) / 20).toFixed(2)) : null,
         ma50: i >= 49 ? Number((prices.slice(i - 49, i + 1).reduce((a, b) => a + b, 0) / 50).toFixed(2)) : null,
     }));
+
     const rsiSeries = history.map((d, i) => {
         if (i < 14) return { ...d, rsi: null };
         let g = 0, l = 0;
         returns.slice(i - 14, i).forEach((r) => { if (r > 0) g += r; else l += Math.abs(r); });
         return { ...d, rsi: Number((100 - 100 / (1 + g / (l || 0.001))).toFixed(1)) };
     });
-    const volSeries = history.map((d) => ({ ...d, atr: Number((((d.high - d.low) / d.price) * 100).toFixed(2)) }));
+
+    const volSeries = history.map((d) => ({ ...d, atr: d.price ? Number((((d.high - d.low) / d.price) * 100).toFixed(2)) : 0 }));
 
     return { volatility, trend, liquidity, stdDev, rsi, totalReturn, maxDrawdown, currentPriceStr, marketCap, peRatio, highLow, withMA, rsiSeries, volSeries };
 }
@@ -418,6 +419,12 @@ export default function StockAnalysis() {
     const [timeHorizon, setTimeHorizon] = useState("1M");
     const [userIntent, setUserIntent] = useState<"Overview" | "Prediction" | "Risk">("Overview");
     const [assetType, setAssetType] = useState<"Stock" | "Index" | "ETF">("Stock");
+
+    const [history1, setHistory1] = useState<any[]>([]);
+    const [history2, setHistory2] = useState<any[]>([]);
+    const [metrics1, setMetrics1] = useState<any>(null);
+    const [metrics2, setMetrics2] = useState<any>(null);
+
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{ charts: string[]; blocks: ReturnType<typeof parseChartBlocks>; verdict: ReturnType<typeof parseVerdict> } | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -427,45 +434,92 @@ export default function StockAnalysis() {
     const validSym1 = sym1.trim() || "AAPL";
     const validSym2 = sym2.trim() || "MSFT";
 
-    const history1 = useMemo(() => generatePriceHistory(validSym1, days), [validSym1, days]);
-    const history2 = useMemo(() => generatePriceHistory(validSym2, days), [validSym2, days]);
-    const metrics1 = useMemo(() => computeMetrics(history1, validSym1), [history1, validSym1]);
-    const metrics2 = useMemo(() => computeMetrics(history2, validSym2), [history2, validSym2]);
-
     const analyze = async () => {
         const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
         if (!GROQ_API_KEY) { setError("VITE_GROQ_API_KEY not set in .env"); return; }
         if (!sym1.trim() || (compareMode && !sym2.trim())) { setError("Please enter valid stock symbols."); return; }
 
         setLoading(true); setResult(null); setError(null);
+        setMetrics1(null); setMetrics2(null);
+        setHistory1([]); setHistory2([]);
+
         try {
+            const resolveSymbol = async (sym: string) => {
+                try {
+                    const sr = await fetch(`/api/search/${sym}`);
+                    if (sr.ok) {
+                        const searchData = await sr.json();
+                        if (searchData && searchData.length > 0 && searchData[0].symbol) {
+                            return searchData[0].symbol;
+                        }
+                    }
+                } catch (err) { }
+                return sym;
+            };
+
+            const fetchStock = async (sym: string) => {
+                const resolvedSym = await resolveSymbol(sym);
+                const r = await fetch(`/api/stock/${resolvedSym}`);
+                if (!r.ok) {
+                    const t = await r.json().catch(() => ({ error: r.statusText }));
+                    throw new Error(`Stock API Error (${resolvedSym}): ${t.error || r.statusText}`);
+                }
+                const data = await r.json();
+                return { ...data, resolvedSym };
+            }
+
+            const data1 = await fetchStock(validSym1);
+            if (!data1.history || !data1.history.length) throw new Error(`No historical data found for ${data1.resolvedSym}.`);
+            setSym1(data1.resolvedSym);
+
+            let data2 = null;
+            if (compareMode) {
+                data2 = await fetchStock(validSym2);
+                if (!data2.history || !data2.history.length) throw new Error(`No historical data found for ${data2.resolvedSym}.`);
+                setSym2(data2.resolvedSym);
+            }
+
+            const h1 = processHistory(data1.history, days);
+            const m1 = computeMetrics(h1, data1.quote);
+            if (!m1) throw new Error(`Not enough data to compute metrics for ${data1.resolvedSym}.`);
+            setHistory1(h1);
+            setMetrics1(m1);
+
+            let m2 = null, h2: any[] = [];
+            if (compareMode && data2) {
+                h2 = processHistory(data2.history, days);
+                m2 = computeMetrics(h2, data2.quote);
+                setHistory2(h2);
+                setMetrics2(m2);
+            }
+
             const input: any = {
                 asset_type: assetType,
-                asset_symbol: validSym1,
+                asset_symbol: data1.resolvedSym,
                 time_horizon: timeHorizon,
-                current_price: metrics1.currentPriceStr,
-                market_cap: metrics1.marketCap,
-                pe_ratio: metrics1.peRatio,
-                volatility_level: metrics1.volatility,
-                trend_strength: metrics1.trend,
-                liquidity: metrics1.liquidity,
+                current_price: m1.currentPriceStr,
+                market_cap: m1.marketCap,
+                pe_ratio: m1.peRatio,
+                volatility_level: m1.volatility,
+                trend_strength: m1.trend,
+                liquidity: m1.liquidity,
                 user_intent: userIntent,
-                total_return: metrics1.totalReturn + "%",
-                max_drawdown: metrics1.maxDrawdown + "%"
+                total_return: m1.totalReturn + "%",
+                max_drawdown: m1.maxDrawdown + "%"
             };
-            if (compareMode) {
-                input.comparison_symbol = validSym2;
-                input.comparison_price = metrics2.currentPriceStr;
-                input.comparison_market_cap = metrics2.marketCap;
-                input.comparison_pe_ratio = metrics2.peRatio;
-                input.comparison_volatility = metrics2.volatility;
-                input.comparison_trend = metrics2.trend;
-                input.comparison_total_return = metrics2.totalReturn + "%";
-                input.comparison_max_drawdown = metrics2.maxDrawdown + "%";
+            if (compareMode && m2 && data2) {
+                input.comparison_symbol = data2.resolvedSym;
+                input.comparison_price = m2.currentPriceStr;
+                input.comparison_market_cap = m2.marketCap;
+                input.comparison_pe_ratio = m2.peRatio;
+                input.comparison_volatility = m2.volatility;
+                input.comparison_trend = m2.trend;
+                input.comparison_total_return = m2.totalReturn + "%";
+                input.comparison_max_drawdown = m2.maxDrawdown + "%";
             }
 
             const raw = await fetchChartRecommendation(input, GROQ_API_KEY);
-            const finalCharts = applyRuleOverrides(raw.charts, assetType, metrics1.volatility, userIntent);
+            const finalCharts = applyRuleOverrides(raw.charts, assetType, m1.volatility, userIntent);
             const finalBlocks = finalCharts.map((c) => raw.blocks.find((b) => b.chartType === c) ?? { chartType: c, purpose: "", keyInsight: "", beginnerInterpretation: "" });
 
             setResult({ charts: finalCharts, blocks: finalBlocks, verdict: raw.verdict });
@@ -502,12 +556,12 @@ export default function StockAnalysis() {
             <motion.div variants={itemAnim} className="glass-card p-5 space-y-4">
                 <div className="flex flex-col md:flex-row gap-4 items-end">
                     {/* Stock 1 */}
-                    <StockInput value={sym1} onChange={(v) => { setSym1(v); setResult(null); }} label={compareMode ? "Stock A" : "Search Symbol"} />
+                    <StockInput value={sym1} onChange={(v) => { setSym1(v); setResult(null); setMetrics1(null); }} label={compareMode ? "Stock A" : "Search Symbol"} />
 
                     {/* Toggle Compare */}
                     <div className="flex flex-col gap-1.5 shrink-0 self-center md:self-end pb-1.5 md:pb-0">
                         <button
-                            onClick={() => { setCompareMode(!compareMode); setResult(null); }}
+                            onClick={() => { setCompareMode(!compareMode); setResult(null); setMetrics1(null); setMetrics2(null); }}
                             className={`flex items-center justify-center gap-2 h-[42px] px-4 rounded-lg border font-semibold transition-all ${compareMode ? "bg-amber-500/10 border-amber-500/40 text-amber-400" : "bg-primary/5 hover:bg-primary/10 border-primary/20 text-primary"}`}
                         >
                             <GitCompare className="w-4 h-4" />
@@ -517,7 +571,7 @@ export default function StockAnalysis() {
 
                     {/* Stock 2 */}
                     {compareMode && (
-                        <StockInput value={sym2} onChange={(v) => { setSym2(v); setResult(null); }} label="Stock B" />
+                        <StockInput value={sym2} onChange={(v) => { setSym2(v); setResult(null); setMetrics2(null); }} label="Stock B" />
                     )}
                 </div>
 
@@ -527,7 +581,7 @@ export default function StockAnalysis() {
                         <label className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">Horizon</label>
                         <div className="flex gap-1">
                             {HORIZONS.map((h) => (
-                                <button key={h} onClick={() => { setTimeHorizon(h); setResult(null); }}
+                                <button key={h} onClick={() => { setTimeHorizon(h); setResult(null); setMetrics1(null); setMetrics2(null); }}
                                     className={`flex-1 text-xs py-2 rounded-md border transition-colors ${timeHorizon === h ? "bg-primary text-primary-foreground border-primary" : "border-border hover:border-primary/40 text-muted-foreground"}`}>
                                     {h}
                                 </button>
@@ -570,51 +624,53 @@ export default function StockAnalysis() {
             </motion.div>
 
             {/* Metrics Panels */}
-            <motion.div variants={itemAnim} className={`grid gap-4 ${compareMode ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"}`}>
-                {/* Stock 1 Metrics */}
-                <div className="space-y-2">
-                    {compareMode && (
-                        <div className="flex items-center gap-2 text-sm font-semibold text-primary px-1">
-                            <div className="w-3 h-3 rounded-full bg-primary" /> {validSym1}
+            {metrics1 && (
+                <motion.div variants={itemAnim} className={`grid gap-4 ${compareMode ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"}`}>
+                    {/* Stock 1 Metrics */}
+                    <div className="space-y-2">
+                        {compareMode && (
+                            <div className="flex items-center gap-2 text-sm font-semibold text-primary px-1">
+                                <div className="w-3 h-3 rounded-full bg-primary" /> {validSym1}
+                            </div>
+                        )}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <MetricCard label="Current Price" value={metrics1.currentPriceStr} color="text-foreground" icon={Coins} />
+                            <MetricCard label="Market Cap" value={metrics1.marketCap} color="text-foreground" icon={Layers} />
+                            <MetricCard label="P/E Ratio" value={metrics1.peRatio} color="text-foreground" icon={Target} />
+                            <MetricCard label="High / Low" value={metrics1.highLow} color="text-muted-foreground" icon={ArrowLeftRight} />
+                            <MetricCard label="Volatility" value={metrics1.volatility} color={volColor(metrics1.volatility)} icon={Activity} />
+                            <MetricCard label="Trend" value={metrics1.trend} color={trendBadge(metrics1.trend)} isBadge icon={TrendingUp} />
+                            <MetricCard label="RSI (14)" value={metrics1.rsi.toFixed(1)} color={rsiColor(metrics1.rsi)} icon={BarChart2} />
+                            <MetricCard label="Total Return" value={(metrics1.totalReturn > 0 ? "+" : "") + metrics1.totalReturn + "%"} color={metrics1.totalReturn > 0 ? "text-emerald-400" : "text-red-400"} icon={Zap} />
                         </div>
-                    )}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        <MetricCard label="Current Price" value={metrics1.currentPriceStr} color="text-foreground" icon={Coins} />
-                        <MetricCard label="Market Cap" value={metrics1.marketCap} color="text-foreground" icon={Layers} />
-                        <MetricCard label="P/E Ratio" value={metrics1.peRatio} color="text-foreground" icon={Target} />
-                        <MetricCard label="High / Low" value={metrics1.highLow} color="text-muted-foreground" icon={ArrowLeftRight} />
-                        <MetricCard label="Volatility" value={metrics1.volatility} color={volColor(metrics1.volatility)} icon={Activity} />
-                        <MetricCard label="Trend" value={metrics1.trend} color={trendBadge(metrics1.trend)} isBadge icon={TrendingUp} />
-                        <MetricCard label="RSI (14)" value={metrics1.rsi.toFixed(1)} color={rsiColor(metrics1.rsi)} icon={BarChart2} />
-                        <MetricCard label="Total Return" value={(metrics1.totalReturn > 0 ? "+" : "") + metrics1.totalReturn + "%"} color={metrics1.totalReturn > 0 ? "text-emerald-400" : "text-red-400"} icon={Zap} />
                     </div>
-                </div>
 
-                {/* Stock 2 Metrics */}
-                <AnimatePresence>
-                    {compareMode && (
-                        <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-2">
-                            <div className="flex items-center gap-2 text-sm font-semibold text-amber-400 px-1">
-                                <div className="w-3 h-3 rounded-full bg-amber-400" /> {validSym2}
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                <MetricCard label="Current Price" value={metrics2.currentPriceStr} color="text-foreground" icon={Coins} />
-                                <MetricCard label="Market Cap" value={metrics2.marketCap} color="text-foreground" icon={Layers} />
-                                <MetricCard label="P/E Ratio" value={metrics2.peRatio} color="text-foreground" icon={Target} />
-                                <MetricCard label="High / Low" value={metrics2.highLow} color="text-muted-foreground" icon={ArrowLeftRight} />
-                                <MetricCard label="Volatility" value={metrics2.volatility} color={volColor(metrics2.volatility)} icon={Activity} />
-                                <MetricCard label="Trend" value={metrics2.trend} color={trendBadge(metrics2.trend)} isBadge icon={TrendingUp} />
-                                <MetricCard label="RSI (14)" value={metrics2.rsi.toFixed(1)} color={rsiColor(metrics2.rsi)} icon={BarChart2} />
-                                <MetricCard label="Total Return" value={(metrics2.totalReturn > 0 ? "+" : "") + metrics2.totalReturn + "%"} color={metrics2.totalReturn > 0 ? "text-emerald-400" : "text-red-400"} icon={Zap} />
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </motion.div>
+                    {/* Stock 2 Metrics */}
+                    <AnimatePresence>
+                        {compareMode && metrics2 && (
+                            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-2">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-amber-400 px-1">
+                                    <div className="w-3 h-3 rounded-full bg-amber-400" /> {validSym2}
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    <MetricCard label="Current Price" value={metrics2.currentPriceStr} color="text-foreground" icon={Coins} />
+                                    <MetricCard label="Market Cap" value={metrics2.marketCap} color="text-foreground" icon={Layers} />
+                                    <MetricCard label="P/E Ratio" value={metrics2.peRatio} color="text-foreground" icon={Target} />
+                                    <MetricCard label="High / Low" value={metrics2.highLow} color="text-muted-foreground" icon={ArrowLeftRight} />
+                                    <MetricCard label="Volatility" value={metrics2.volatility} color={volColor(metrics2.volatility)} icon={Activity} />
+                                    <MetricCard label="Trend" value={metrics2.trend} color={trendBadge(metrics2.trend)} isBadge icon={TrendingUp} />
+                                    <MetricCard label="RSI (14)" value={metrics2.rsi.toFixed(1)} color={rsiColor(metrics2.rsi)} icon={BarChart2} />
+                                    <MetricCard label="Total Return" value={(metrics2.totalReturn > 0 ? "+" : "") + metrics2.totalReturn + "%"} color={metrics2.totalReturn > 0 ? "text-emerald-400" : "text-red-400"} icon={Zap} />
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </motion.div>
+            )}
 
             {/* Head-to-Head Table & AI Verdict */}
             <AnimatePresence>
-                {compareMode && result && (
+                {compareMode && result && metrics1 && metrics2 && (
                     <motion.div variants={itemAnim} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="grid grid-cols-1 lg:grid-cols-2 gap-4 border-t border-border/50 pt-6">
                         <CompareTable sym1={validSym1} sym2={validSym2} m1={metrics1} m2={metrics2} />
 
@@ -660,7 +716,7 @@ export default function StockAnalysis() {
 
             {/* Chart Results */}
             <AnimatePresence>
-                {result && (
+                {result && metrics1 && (
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-primary/5 border border-primary/20 rounded-lg px-4 py-2.5">
                             <Info className="w-3.5 h-3.5 text-primary shrink-0" />
