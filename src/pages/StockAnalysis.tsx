@@ -386,7 +386,7 @@ BUY VERDICT:
         const resp = await fetch(GROQ_URL, {
             method: "POST",
             headers: { Authorization: `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }], temperature: 0.2 }),
+            body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }], temperature: 0.2 }),
         });
         if (!resp.ok) { const t = await resp.text(); throw new Error(`Groq error ${resp.status}: ${t.slice(0, 200)}`); }
         const groqData = await resp.json();
