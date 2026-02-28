@@ -21,16 +21,23 @@ serve(async (req) => {
 
     if (!symbol) throw new Error("Symbol is required");
 
+    // Automatically append .NS for common Indian stocks if no exchange is provided
+    let yfSymbol = symbol;
+    if (!yfSymbol.includes('.') && /^[A-Z0-9]+$/.test(yfSymbol)) {
+      // If it looks like an Indian stock (like COALINDIA, RELIANCE, TCS) that doesn't have an exchange suffix, append .NS
+      yfSymbol = `${yfSymbol}.NS`;
+    }
+
     // Fetch historical data
     const period1 = new Date(Date.now() - (Number(days) || 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const historyData = await yahooFinance.chart(symbol, {
+    const historyData = await yahooFinance.chart(yfSymbol, {
       period1: period1,
       interval: "1d"
     });
     const historical = historyData.quotes;
 
     // Fetch quote data for fundamentals
-    const quote = await yahooFinance.quote(symbol);
+    const quote = await yahooFinance.quote(yfSymbol);
 
     return new Response(JSON.stringify({ history: historical, quote }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
