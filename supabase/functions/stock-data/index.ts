@@ -22,19 +22,23 @@ serve(async (req) => {
     if (!symbol) throw new Error("Symbol is required");
 
     // Fetch historical data
-    const queryOptions = { period1: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0] };
-    const historical = await yahooFinance.historical(symbol, queryOptions);
+    const period1 = new Date(Date.now() - (Number(days) || 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const historyData = await yahooFinance.chart(symbol, {
+      period1: period1,
+      interval: "1d"
+    });
+    const historical = historyData.quotes;
 
     // Fetch quote data for fundamentals
     const quote = await yahooFinance.quote(symbol);
 
-    return new Response(JSON.stringify({ historical, quote }), {
+    return new Response(JSON.stringify({ history: historical, quote }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Yahoo Finance error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
