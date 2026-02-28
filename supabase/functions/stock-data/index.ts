@@ -9,6 +9,7 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  let requestedSymbol = "";
   try {
     const { symbol, query, days = 30 } = await req.json();
 
@@ -20,8 +21,8 @@ serve(async (req) => {
     }
 
     if (!symbol) throw new Error("Symbol is required");
+    requestedSymbol = symbol;
 
-    let requestedSymbol = symbol;
     // Automatically append .NS for common Indian stocks if no exchange is provided
     let yfSymbol = symbol;
     if (!yfSymbol.includes('.') && /^[A-Z0-9]+$/.test(yfSymbol)) {
@@ -47,11 +48,7 @@ serve(async (req) => {
   } catch (err: any) {
     console.error("Yahoo Finance error:", err);
 
-    let finalSym = "";
-    try {
-      const payload = await req.clone().json();
-      finalSym = payload.symbol || "UNKNOWN";
-    } catch { finalSym = "UNKNOWN"; }
+    let finalSym = requestedSymbol || "UNKNOWN";
 
     // If Yahoo Finance IP bans us (429 Too Many Requests), return dummy data instead of breaking the app during the hackathon
     if (err.message && err.message.includes("Too Many Requests")) {
@@ -59,9 +56,13 @@ serve(async (req) => {
       for (let i = 0; i < finalSym.length; i++) {
         hash = finalSym.charCodeAt(i) + ((hash << 5) - hash);
       }
-      const mockBase = 100 + (Math.abs(hash) % 400); // Gives a deterministic base price between 100 and 500
 
-      const isUS = !finalSym.includes('.');
+      const isIndian = finalSym.endsWith('.NS') || finalSym.endsWith('.BO') || (!finalSym.includes('.') && /^[A-Z0-9]+$/.test(finalSym));
+      const currency = isIndian ? "INR" : "USD";
+
+      // Indian stocks generally have higher nominal share prices compared to US
+      const scaleMultiplier = isIndian ? 5 : 1;
+      const mockBase = (100 + (Math.abs(hash) % 400)) * scaleMultiplier;
 
       const dummyHistory = Array.from({ length: 30 }).map((_, i) => {
         const base = mockBase + Math.random() * (mockBase * 0.1);
@@ -71,13 +72,14 @@ serve(async (req) => {
         };
       });
       const dummyQuote = {
-        currency: isUS ? "USD" : "INR", regularMarketPrice: Number((mockBase * 1.05).toFixed(2)), marketCap: 2500000000000, trailingPE: 12.5, fiftyTwoWeekHigh: Number((mockBase * 1.2).toFixed(2)), fiftyTwoWeekLow: Number((mockBase * 0.8).toFixed(2))
+        currency: currency, regularMarketPrice: Number((mockBase * 1.05).toFixed(2)), marketCap: 2500000000000, trailingPE: 12.5, fiftyTwoWeekHigh: Number((mockBase * 1.2).toFixed(2)), fiftyTwoWeekLow: Number((mockBase * 0.8).toFixed(2))
       };
+
       return new Response(JSON.stringify({ history: dummyHistory, quote: dummyQuote }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    console.error("Yahoo Finance error:", err);
+
     return new Response(JSON.stringify({ error: err.message }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
