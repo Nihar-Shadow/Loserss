@@ -10,6 +10,7 @@ import {
     Activity, RefreshCw, ChevronDown, CheckCircle2, Info,
     GitCompare, ArrowLeftRight, Search, Trophy, Layers, Target, Coins
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
