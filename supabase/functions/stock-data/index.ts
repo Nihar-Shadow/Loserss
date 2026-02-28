@@ -10,7 +10,15 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { symbol, days = 30 } = await req.json();
+    const { symbol, query, days = 30 } = await req.json();
+
+    if (query) {
+      const searchRes = await yahooFinance.search(query);
+      return new Response(JSON.stringify(searchRes.quotes), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     if (!symbol) throw new Error("Symbol is required");
 
     // Fetch historical data

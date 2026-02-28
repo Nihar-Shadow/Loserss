@@ -446,12 +446,11 @@ export default function StockAnalysis() {
         try {
             const resolveSymbol = async (sym: string) => {
                 try {
-                    const sr = await fetch(`/api/search/${sym}`);
-                    if (sr.ok) {
-                        const searchData = await sr.json();
-                        if (searchData && searchData.length > 0 && searchData[0].symbol) {
-                            return searchData[0].symbol;
-                        }
+                    const { data } = await supabase.functions.invoke('stock-data', {
+                        body: { query: sym }
+                    });
+                    if (data && data.length > 0 && data[0].symbol) {
+                        return data[0].symbol;
                     }
                 } catch (err) { }
                 return sym;
@@ -459,12 +458,19 @@ export default function StockAnalysis() {
 
             const fetchStock = async (sym: string) => {
                 const resolvedSym = await resolveSymbol(sym);
-                const r = await fetch(`/api/stock/${resolvedSym}`);
-                if (!r.ok) {
-                    const t = await r.json().catch(() => ({ error: r.statusText }));
-                    throw new Error(`Stock API Error (${resolvedSym}): ${t.error || r.statusText}`);
+
+                const { data, error } = await supabase.functions.invoke('stock-data', {
+                    body: { symbol: resolvedSym, days: 400 }
+                });
+
+                if (error || !data) {
+                    throw new Error(`Stock API Error (${resolvedSym}): ${error?.message || "Function failed"}`);
                 }
-                const data = await r.json();
+
+                if (data.error) {
+                    throw new Error(`Stock API Error (${resolvedSym}): ${data.error}`);
+                }
+
                 return { ...data, resolvedSym };
             }
 
