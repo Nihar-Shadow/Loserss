@@ -21,12 +21,14 @@ serve(async (req) => {
 
     if (!symbol) throw new Error("Symbol is required");
 
+    let requestedSymbol = symbol;
     // Automatically append .NS for common Indian stocks if no exchange is provided
     let yfSymbol = symbol;
     if (!yfSymbol.includes('.') && /^[A-Z0-9]+$/.test(yfSymbol)) {
       // If it looks like an Indian stock (like COALINDIA, RELIANCE, TCS) that doesn't have an exchange suffix, append .NS
       yfSymbol = `${yfSymbol}.NS`;
     }
+    requestedSymbol = yfSymbol;
 
     // Fetch historical data
     const period1 = new Date(Date.now() - (Number(days) || 30) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -45,17 +47,31 @@ serve(async (req) => {
   } catch (err: any) {
     console.error("Yahoo Finance error:", err);
 
+    let finalSym = "";
+    try {
+      const payload = await req.clone().json();
+      finalSym = payload.symbol || "UNKNOWN";
+    } catch { finalSym = "UNKNOWN"; }
+
     // If Yahoo Finance IP bans us (429 Too Many Requests), return dummy data instead of breaking the app during the hackathon
     if (err.message && err.message.includes("Too Many Requests")) {
+      let hash = 0;
+      for (let i = 0; i < finalSym.length; i++) {
+        hash = finalSym.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const mockBase = 100 + (Math.abs(hash) % 400); // Gives a deterministic base price between 100 and 500
+
+      const isUS = !finalSym.includes('.');
+
       const dummyHistory = Array.from({ length: 30 }).map((_, i) => {
-        const base = 400 + Math.random() * 50;
+        const base = mockBase + Math.random() * (mockBase * 0.1);
         return {
           date: new Date(Date.now() - (30 - i) * 24 * 60 * 60 * 1000).toISOString(),
-          open: base, high: base + 10, low: base - 10, close: base + (Math.random() > 0.5 ? 5 : -5), volume: 1000000 + Math.random() * 500000
+          open: base, high: base + (mockBase * 0.02), low: base - (mockBase * 0.02), close: base + (Math.random() > 0.5 ? (mockBase * 0.01) : -(mockBase * 0.01)), volume: 1000000 + Math.random() * 500000
         };
       });
       const dummyQuote = {
-        currency: "INR", regularMarketPrice: 425.50, marketCap: 2500000000000, trailingPE: 12.5, fiftyTwoWeekHigh: 500, fiftyTwoWeekLow: 350
+        currency: isUS ? "USD" : "INR", regularMarketPrice: Number((mockBase * 1.05).toFixed(2)), marketCap: 2500000000000, trailingPE: 12.5, fiftyTwoWeekHigh: Number((mockBase * 1.2).toFixed(2)), fiftyTwoWeekLow: Number((mockBase * 0.8).toFixed(2))
       };
       return new Response(JSON.stringify({ history: dummyHistory, quote: dummyQuote }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
