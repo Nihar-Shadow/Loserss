@@ -1,110 +1,122 @@
-# FinMentor AI
+# FinMentor AI - AI-Powered Finance Education & Investment Intelligence Platform 🚀
 
-FinMentor AI is a comprehensive AI-powered financial platform designed to provide personalized financial advising, learning resources, portfolio analysis, and market intelligence all in one place.
+**🏆 Winner of FESTONIC 2K26 🏆**
 
-## Features
+FinMentor AI is a full-stack web platform that integrates financial education with real-time market intelligence and AI-powered advisory. It functions as a unified ecosystem where users can learn, practice, analyze, and receive intelligent guidance within a single environment.
 
-- **AI Financial Advisor**: Get personalized financial advice and interact with an intelligent chatbot for your finance queries.
-- **User Authentication**: Secure signup and login powered by Supabase.
-- **Dashboard**: A central hub to monitor your financial activities and progress.
-- **Financial Learning Modules**: Structured educational content to improve your financial literacy.
-- **Portfolio Analyzer**: Tools to evaluate and analyze your investment portfolio.
-- **Stock Prediction**: AI-driven insights and predictions for various stocks.
-- **News Intelligence**: Curated, up-to-date financial news and market intelligence.
-- **Community Forum**: Connect with other users to discuss financial topics and strategies.
-- **Gamification Leaderboard**: Track your learning progress and compete with others on the platform.
+---
 
-## Technology Stack
+## 🎯 The Problem
 
-- **Frontend Framework**: React 18 with Vite
+Despite increased access to financial markets, there remains a massive gap between financial learning and real-world application. Many individuals understand theoretical concepts but struggle to interpret market movements, analyze news impact, or manage portfolios effectively. 
+
+Existing platforms naturally separate learning, trading tools, and advisory systems. There is a distinct lack of an integrated ecosystem that allows users to:
+- Learn financial concepts
+- Practice market prediction
+- Understand the effect of news on markets
+- Analyze personal portfolios
+- Receive AI-driven strategic guidance
+
+## 💡 The Solution (Our Challenge)
+
+We built **FinMentor AI** to solve this exact problem. It is an integrated ecosystem that functions as a unified web platform bridging financial education with real-time market intelligence and AI-powered advisory all in one seamless environment.
+
+---
+
+## ✨ Core Features
+
+- **AI Financial Advisor**: Get personalized financial advice and interact with an intelligent NLP chatbot for any finance queries.
+- **Financial Learning Modules**: Structured educational content designed to seamlessly improve your financial literacy.
+- **Stock Prediction Simulator**: Practice market prediction through AI-driven insights and forecasting for various stocks.
+- **News & Market Intelligence**: Understand the effect of news on markets with curated, up-to-date financial news and sentiment analysis.
+- **Portfolio Analyzer**: Powerful dashboard tools to evaluate, manage, and analyze your personal investment portfolio.
+- **Community Forum**: Connect with other users to discuss financial topics, strategies, and market events.
+- **Gamification Leaderboard**: Track your learning progress, earn points, and compete with others on the platform.
+- **Secure Authentication**: Robust signup and login powered by Supabase auth.
+
+---
+
+## 🛠 Technology Stack
+
+- **Frontend**: React 18, Vite
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS & shadcn/ui (based on Radix UI)
+- **State Management & Data Fetching**: React Query (@tanstack/react-query)
 - **Routing**: React Router DOM
-- **Backend & Authentication**: Supabase
-- **Charts**: Recharts
+- **Backend & Database**: Supabase (PostgreSQL + Edge Functions)
+- **Data Visualization**: Recharts
 - **Animations**: Framer Motion
-- **Data Fetching**: React Query (@tanstack/react-query)
 
-## Getting Started
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 Make sure you have [Node.js](https://nodejs.org/) and npm installed on your machine.
 
 ### Installation
 
-1. Clone the repository:
+1. **Clone the repository:**
    ```bash
    git clone <YOUR_GIT_URL>
-   ```
-
-2. Navigate into the project directory:
-   ```bash
    cd finmentor-ai
    ```
 
-3. Install the dependencies:
+2. **Install the dependencies:**
    ```bash
    npm install
    ```
 
-### Running Locally
+3. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+   The application will be available at `http://localhost:8080/` (or port specified by Vite).
 
-To start the development server, run:
-```bash
-npm run dev
-```
+4. **Production Build:**
+   ```bash
+   npm run build
+   ```
+   This will generate the compiled output in the `dist` folder.
 
-The application will be available at `http://localhost:8080/` (or another port if 8080 is in use).
+---
 
-To create a production build, run:
-```bash
-npm run build
-```
-This will generate the compiled output in the `dist` folder.
+## 🔑 API Configuration Setup
 
-## API Configuration Setup
+FinMentor AI requires multiple API keys and environment variables to function properly across frontend and backend edge functions.
 
-NexusFin requires multiple API keys and environment variables to function correctly across both frontend and backend edge functions.
-
-### 1) Required API Keys
+### Required Environment Variables
 
 | Environment Variable | Description |
 | :--- | :--- |
-| `VITE_SUPABASE_URL` | **Database URL:** Your public Supabase project URL for the database and authentication layers. |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | **JWT Secret/Anon Key:** Publicly safe anon key used to interact with your Supabase backend from the browser. |
-| `MARKET_DATA_API_KEY` | *(Optional/Future)* **Market Data API:** Used if migrating from the mock/simulated data to live historical tick data (e.g., Alpaca or Yahoo Finance APIs). |
-| `NEWS_API_KEY` | *(Optional/Future)* **News API:** Fetches live news articles before they are piped into the sentiment engine. |
-| `LOVABLE_API_KEY` | **LLM & Sentiment AI Key:** The proxy API key used inside the Supabase Edge functions to orchestrate Google Gemini outputs. |
+| `VITE_SUPABASE_URL` | **Database URL**: Your public Supabase project URL for the database and authentication. |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | **Anon Key**: Publicly safe anon key used to interact with your Supabase backend. |
+| `MARKET_DATA_API_KEY` | **Market Data API**: Used for fetching simulated/mock datastreams or live historical tick data. |
+| `NEWS_API_KEY` | **News API**: Fetches live news articles prior to pushing them to the sentiment engine. |
+| `GROQ_API_KEY` | **LLM AI Key**: The proxy API key used inside Supabase Edge functions to orchestrate AI responses. |
 
-### 2) `.env` Example File Template
+### `.env` File Example
 
-Create a `.env` file in the root directory (for the Vite frontend architecture) and load your edge Secrets directly into Supabase. Here is a master template outlining everything required:
+Create a `.env` file in the root directory (for the Vite frontend architecture) and load your edge secrets directly into Supabase.
 
 ```env
 # ====== Frontend Application (.env) ======
 VITE_SUPABASE_PROJECT_ID="your_project_id"
-VITE_SUPABASE_PUBLISHABLE_KEY="eyJhbGciOiJIUzI1Ni... (your anon key)"
+VITE_SUPABASE_PUBLISHABLE_KEY="eyJhbGciOiJIUzI1Ni..."
 VITE_SUPABASE_URL="https://your_project_id.supabase.co"
 
 # ====== Supabase Edge Functions / Backend (.env) ======
 # DO NOT EXPOSE TO FRONTEND
-LOVABLE_API_KEY="sk-lovable-..."
+GROQ_API_KEY="sk-groq-..."
 MARKET_DATA_API_KEY="sk-market-..."
 NEWS_API_KEY="sk-news-..."
 ```
 
-### 3) Security Best Practices
+### Security Details
 
-To maintain data integrity and project security in production, you must adhere strictly to the following rules:
-- **Do not commit API keys:** Ensure your `.env` files are added to `.gitignore`. Never commit or push them to your repository or public environments.
-- **Use Environment Variables:** Hardcode absolutely zero logic keys; load them natively into the execution environments via `import.meta.env` (Vite) or `process.env / Deno.env.get` (Edge computing structures).
-- **Backend-Only Exposure:** The critical LLM keys (like `LOVABLE_API_KEY`) and theoretical live Market Data keys MUST only exist on the backend layers (Supabase Edge functions) so they cannot be harvested by a malicious client inspecting network requests.
-- **Rate-Limiting Protection:** Ensure production backend triggers gracefully handle `429 Too Many Requests` API status codes. Edge functions should currently return user-friendly UI errors when LLM credits or limits are reached to deter abuse.
+- **Do not commit API keys:** Ensure your `.env` files are in `.gitignore`.
+- **Backend-Only Exposure:** Critical LLM keys (like `GROQ_API_KEY`) MUST only exist on the backend layers (Supabase Edge functions).
+- **Restart Local Server:** After updating `.env` keys locally, restart the development server `npm run dev`.
 
-### 4) Local Configuration Instructions
-
-1.  **Duplicate the Template:** Copy the `.env` example block outlined above into a file explicitly named `.env` in the root of your project.
-2.  **Hydrate Keys:** Fill out your assigned Supabase credentials and generate LLM API proxy keys.
-3.  **Local Edge Servicing:** If testing Edge functions locally and mocking live functionality, load your backend secrets using: `npx supabase functions serve --env-file ./supabase/.env`.
-4.  **Backend Secrecy:** For deploying to production, upload the backend keys using the Supabase CLI: `npx supabase secrets set LOVABLE_API_KEY=sk-your-key`.
-5.  **Restart Server:** If updating frontend keys, stop your current node UI server (`Ctrl+C`) and run `npm run dev` to ingest the new environment settings into your local instance context.
+---
+*Built with ❤️ for FESTONIC 2K26.*

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import yahooFinance from "npm:-yahoo-finance2@2.11.3"; // Using npm specifier
+import yahooFinance from "npm:yahoo-finance2@2.11.3"; // Using npm specifier
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
