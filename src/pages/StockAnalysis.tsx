@@ -465,7 +465,8 @@ export default function StockAnalysis() {
                 });
 
                 if (error || !data) {
-                    throw new Error(`Stock API Error (${resolvedSym}): ${error?.message || "Function failed"}`);
+                    console.error("Invoke Error:", error);
+                    throw new Error(`Edge Function Failed: ${error?.message || "Unknown error"}`);
                 }
 
                 if (data.error) {
