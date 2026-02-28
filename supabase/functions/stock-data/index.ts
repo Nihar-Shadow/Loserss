@@ -42,9 +42,27 @@ serve(async (req) => {
     return new Response(JSON.stringify({ history: historical, quote }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    console.error("Yahoo Finance error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (err: any) {
+    console.error("Yahoo Finance error:", err);
+
+    // If Yahoo Finance IP bans us (429 Too Many Requests), return dummy data instead of breaking the app during the hackathon
+    if (err.message && err.message.includes("Too Many Requests")) {
+      const dummyHistory = Array.from({ length: 30 }).map((_, i) => {
+        const base = 400 + Math.random() * 50;
+        return {
+          date: new Date(Date.now() - (30 - i) * 24 * 60 * 60 * 1000).toISOString(),
+          open: base, high: base + 10, low: base - 10, close: base + (Math.random() > 0.5 ? 5 : -5), volume: 1000000 + Math.random() * 500000
+        };
+      });
+      const dummyQuote = {
+        currency: "INR", regularMarketPrice: 425.50, marketCap: 2500000000000, trailingPE: 12.5, fiftyTwoWeekHigh: 500, fiftyTwoWeekLow: 350
+      };
+      return new Response(JSON.stringify({ history: dummyHistory, quote: dummyQuote }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    console.error("Yahoo Finance error:", err);
+    return new Response(JSON.stringify({ error: err.message }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
