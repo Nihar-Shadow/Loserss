@@ -123,7 +123,7 @@ export default function AIAdvisor() {
         method: "POST",
         headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          model: "llama-3.1-8b-instant",
           messages: allMessages.map(m => ({ role: m.role, content: m.content })),
           temperature: 0.2,
         }),
