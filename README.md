@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.png" alt="FinMentor AI Logo" width="150" />
+</p>
+
 # FinMentor AI - AI-Powered Finance Education & Investment Intelligence Platform 🚀
 
 **🏆 Winner of FESTONIC 2K26 🏆**
@@ -58,7 +62,7 @@ Make sure you have [Node.js](https://nodejs.org/) and npm installed on your mach
 
 1. **Clone the repository:**
    ```bash
-   git clone <YOUR_GIT_URL>
+   git clone https://github.com/Nihar-Shadow/Loserss.git
    cd finmentor-ai
    ```
 
