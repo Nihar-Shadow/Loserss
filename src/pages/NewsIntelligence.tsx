@@ -97,10 +97,11 @@ You MUST call the news_intelligence_report function with your precise analysis.`
 
       const userPrompt = `Generate a comprehensive quantitative financial news intelligence report for the Indian market covering these sectors: ${sectors.join(", ")}.
 Include:
-1. 8 realistic financial news items with Indian stock tickers (like RELIANCE, TCS, HDFCBANK, INFY, TATAMOTORS).
+1. 8 realistic financial news items with Indian stock tickers (like RELIANCE, TCS, HDFCBANK, INFY, TATAMOTORS). You MUST include a 2-3 sentence "ai_analysis" for EACH news item explaining its market impact.
 2. Sector-wise sentiment breakdown.
 3. Overall market insight paragraph.
-4. 1-2 drastic alerts if warranted, otherwise empty array.`;
+4. 1-2 drastic alerts if warranted, otherwise empty array.
+Crucially, ensure you populate ALL required fields in the JSON schema, including ai_analysis and sentiment_score.`;
 
       const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
