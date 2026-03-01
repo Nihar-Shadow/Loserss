@@ -6,6 +6,8 @@
 
 **🏆 Winner of FESTONIC 2K26 🏆**
 
+**🌐 Live Demo:** [fin-mentor-ai.vercel.app](https://fin-mentor-ai.vercel.app)
+
 FinMentor AI is a full-stack web platform that integrates financial education with real-time market intelligence and AI-powered advisory. It functions as a unified ecosystem where users can learn, practice, analyze, and receive intelligent guidance within a single environment.
 
 ---
