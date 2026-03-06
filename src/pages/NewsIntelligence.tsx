@@ -85,23 +85,63 @@ export default function NewsIntelligence() {
     try {
       if (!GROQ_API_KEY) throw new Error("VITE_GROQ_API_KEY is not set in .env");
 
-      const sectors = ["Technology", "Banking", "Energy", "Pharma", "Auto"];
+      // Rotate through more sectors so each refresh can highlight different ones
+      const ALL_SECTORS = ["Technology", "Banking", "Energy", "Pharma", "Auto", "FMCG", "Real Estate", "Metals & Mining"];
+      // Pick 5 sectors randomly each refresh for variety
+      const shuffled = [...ALL_SECTORS].sort(() => Math.random() - 0.5);
+      const sectors = shuffled.slice(0, 5);
+
+      // Current date + a random session token forces the model off its cached "default" stories
+      const now = new Date();
+      const dateStr = now.toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      const timeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+      const sessionSeed = Math.floor(Math.random() * 99999); // random seed so prompt is never identical
       const allocations = portfolio?.allocations ?? [];
 
-      const systemPrompt = `You are a strict, quantitative financial news intelligence AI for the Indian stock market.
-Generate highly analytical, realistic, current-feeling financial news analysis.
-For each news item provide:
-1) Sentiment Score: A float between -1.0 and 1.0.
-2) Sector: The primary sector this news affects (e.g., Technology, Banking).
-You MUST call the news_intelligence_report function with your precise analysis.`;
+      // Use JSON mode instead of tool calls — llama-3.1-8b-instant fails Groq's
+      // strict per-field schema validation unpredictably. JSON mode lets us define
+      // the schema in the prompt and do our own lenient parsing.
+      const systemPrompt = `You are a quantitative financial news intelligence AI for the Indian stock market.
+You MUST respond with ONLY a valid JSON object — no markdown, no code fences, no explanation.
+The JSON must have this exact structure:
+{
+  "news_items": [
+    {
+      "id": 1,
+      "title": "string",
+      "source": "string (e.g. Economic Times, Bloomberg, CNBC-TV18)",
+      "time": "YYYY-MM-DD HH:MM:SS",
+      "sentiment": "positive" | "negative" | "neutral",
+      "sentiment_score": number between -1.0 and 1.0,
+      "impact": "High" | "Medium" | "Low",
+      "sector": "string",
+      "stocks": ["TICKER1"],
+      "summary": "2 sentence summary",
+      "ai_analysis": "2-3 sentence market impact analysis"
+    }
+  ],
+  "sector_sentiment": [
+    { "name": "Technology", "positive": 2, "neutral": 0, "negative": 0 }
+  ],
+  "market_insight": "2-3 sentence overall insight",
+  "market_mood": "bullish" | "bearish" | "neutral" | "mixed",
+  "nifty_sentiment": "1-2 sentences on NIFTY 50 outlook",
+  "drastic_alerts": []
+}`;
 
-      const userPrompt = `Generate a comprehensive quantitative financial news intelligence report for the Indian market covering these sectors: ${sectors.join(", ")}.
-Include:
-1. 8 realistic financial news items with Indian stock tickers (like RELIANCE, TCS, HDFCBANK, INFY, TATAMOTORS). You MUST include a 2-3 sentence "ai_analysis" for EACH news item explaining its market impact.
-2. Sector-wise sentiment breakdown.
-3. Overall market insight paragraph.
-4. 1-2 drastic alerts if warranted, otherwise empty array.
-Crucially, ensure you populate ALL required fields in the JSON schema, including ai_analysis and sentiment_score.`;
+      const userPrompt = `[Session #${sessionSeed} | ${dateStr} | ${timeStr} IST]
+Generate a FRESH financial news intelligence report for the Indian market as of today.
+Featured sectors this session: ${sectors.join(", ")}.
+
+Rules:
+- Generate 8 UNIQUE news stories that feel current for ${dateStr}. Do NOT repeat generic placeholder stories.
+- Use varied real Indian tickers across the stories (e.g. RELIANCE, TCS, HDFCBANK, INFY, TATAMOTORS, WIPRO, ICICIBANK, AXISBANK, BAJFINANCE, SUNPHARMA, COALINDIA, NTPC)
+- Each story MUST have a distinct ai_analysis (2-3 sentences) and a sentiment_score between -1.0 and 1.0
+- sector_sentiment MUST cover: ${sectors.join(", ")}
+- nifty_sentiment: 1-2 sentences on NIFTY 50 outlook today
+- drastic_alerts: include 1-2 if there are major market events, otherwise []
+- Mix of positive, negative and neutral stories — do NOT make them all positive
+- Return ONLY raw JSON, nothing else`;
 
       const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -112,70 +152,8 @@ Crucially, ensure you populate ALL required fields in the JSON schema, including
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
           ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "news_intelligence_report",
-              description: "Return structured financial news intelligence data",
-              parameters: {
-                type: "object",
-                properties: {
-                  news_items: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        id: { type: "number" },
-                        title: { type: "string" },
-                        source: { type: "string" },
-                        time: { type: "string" },
-                        sentiment: { type: "string", enum: ["positive", "negative", "neutral"] },
-                        impact: { type: "string", enum: ["High", "Medium", "Low"] },
-                        sector: { type: "string" },
-                        stocks: { type: "array", items: { type: "string" } },
-                        summary: { type: "string" },
-                        ai_analysis: { type: "string" },
-                        sentiment_score: { type: "number" },
-                      },
-                      required: ["id", "title", "source", "time", "sentiment", "impact", "sector", "stocks", "summary", "ai_analysis", "sentiment_score"],
-                    },
-                  },
-                  sector_sentiment: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        name: { type: "string" },
-                        positive: { type: "number" },
-                        negative: { type: "number" },
-                        neutral: { type: "number" },
-                      },
-                      required: ["name", "positive", "negative", "neutral"],
-                    },
-                  },
-                  market_insight: { type: "string" },
-                  market_mood: { type: "string", enum: ["bullish", "bearish", "neutral", "mixed"] },
-                  nifty_sentiment: { type: "string" },
-                  drastic_alerts: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        severity: { type: "string", enum: ["critical", "warning"] },
-                        headline: { type: "string" },
-                        description: { type: "string" },
-                        affected_sectors: { type: "array", items: { type: "string" } },
-                        recommended_action: { type: "string" },
-                      },
-                      required: ["severity", "headline", "description", "affected_sectors", "recommended_action"],
-                    },
-                  },
-                },
-                required: ["news_items", "sector_sentiment", "market_insight", "market_mood", "nifty_sentiment", "drastic_alerts"],
-              },
-            },
-          }],
-          tool_choice: { type: "function", function: { name: "news_intelligence_report" } },
+          response_format: { type: "json_object" },
+          temperature: 0.85,
         }),
       });
 
@@ -185,10 +163,20 @@ Crucially, ensure you populate ALL required fields in the JSON schema, including
       }
 
       const groqData = await resp.json();
-      const toolCall = groqData.choices?.[0]?.message?.tool_calls?.[0];
-      if (!toolCall) throw new Error("No tool call returned from Groq");
+      const rawContent = groqData.choices?.[0]?.message?.content;
+      if (!rawContent) throw new Error("No content returned from Groq");
 
-      const report = JSON.parse(toolCall.function.arguments) as NewsReport;
+      // Strip any accidental markdown fences before parsing
+      const cleaned = rawContent.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      const report = JSON.parse(cleaned) as NewsReport;
+
+      // Safe defaults for any fields the model may have omitted
+      if (!report.news_items || !Array.isArray(report.news_items)) report.news_items = [];
+      if (!report.sector_sentiment || !Array.isArray(report.sector_sentiment)) report.sector_sentiment = [];
+      if (!report.market_insight) report.market_insight = "Market data is being analyzed.";
+      if (!report.market_mood) report.market_mood = "neutral";
+      if (!report.nifty_sentiment) report.nifty_sentiment = `NIFTY 50 outlook appears ${report.market_mood} based on current market developments.`;
+      if (!report.drastic_alerts || !Array.isArray(report.drastic_alerts)) report.drastic_alerts = [];
 
       // === Deterministic Backend Math (runs in browser) ===
       report.news_items = report.news_items.map((news) => {

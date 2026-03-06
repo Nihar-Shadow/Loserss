@@ -29,6 +29,7 @@ export default function Community() {
   const [messages, setMessages] = useState<CommunityMessage[]>([]);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -68,6 +69,7 @@ export default function Community() {
 
   useEffect(() => {
     fetchMessages();
+    setClearConfirm(false);
   }, [activeChannel]);
 
   // Realtime subscription
@@ -139,6 +141,21 @@ export default function Community() {
     if (error) toast({ title: "Error", description: "Failed to delete.", variant: "destructive" });
   };
 
+  const handleClearMyMessages = async () => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("community_messages")
+      .delete()
+      .eq("channel", activeChannel)
+      .eq("user_id", user.id);
+    if (error) {
+      toast({ title: "Error", description: "Failed to clear messages.", variant: "destructive" });
+    } else {
+      toast({ title: "Cleared", description: "Your messages in this channel have been removed." });
+    }
+    setClearConfirm(false);
+  };
+
   const getInitial = (name: string) => name?.charAt(0)?.toUpperCase() || "?";
   const formatTime = (iso: string) => {
     const d = new Date(iso);
@@ -183,9 +200,8 @@ export default function Community() {
             <button
               key={ch.id}
               onClick={() => setActiveChannel(ch.id)}
-              className={`flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm transition-colors ${
-                activeChannel === ch.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-              }`}
+              className={`flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm transition-colors ${activeChannel === ch.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                }`}
             >
               <ch.icon className="w-4 h-4 shrink-0" />
               <div className="text-left">
@@ -203,8 +219,39 @@ export default function Community() {
             <activeChannelData.icon className="w-4 h-4 text-primary" />
             <span className="font-semibold text-sm">{activeChannelData.name}</span>
             <span className="text-xs text-muted-foreground ml-2">{activeChannelData.desc}</span>
+
+            {/* Clear my messages button */}
+            <div className="ml-auto flex items-center gap-2">
+              {clearConfirm ? (
+                <>
+                  <span className="text-xs text-destructive font-medium">Clear your messages?</span>
+                  <button
+                    onClick={handleClearMyMessages}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-destructive text-destructive-foreground font-semibold hover:bg-destructive/80 transition-colors"
+                  >
+                    Yes, clear
+                  </button>
+                  <button
+                    onClick={() => setClearConfirm(false)}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setClearConfirm(true)}
+                  title="Clear my messages in this channel"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded-lg hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Clear Mine</span>
+                </button>
+              )}
+            </div>
+
             {/* Mobile channel switcher */}
-            <div className="md:hidden ml-auto flex gap-1">
+            <div className="md:hidden flex gap-1">
               {channels.map((ch) => (
                 <button
                   key={ch.id}
